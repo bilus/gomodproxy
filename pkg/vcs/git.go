@@ -240,6 +240,10 @@ func (g *gitVCS) commit(ctx context.Context, version Version) (*object.Commit, e
 	if err != nil && err != git.NoErrAlreadyUpToDate {
 		return nil, err
 	}
+	tagPrefix := ""
+	if g.prefix != "" {
+		tagPrefix = g.prefix + "/"
+	}
 
 	version = Version(strings.TrimSuffix(string(version), "+incompatible"))
 	hash := version.Hash()
@@ -249,7 +253,7 @@ func (g *gitVCS) commit(ctx context.Context, version Version) (*object.Commit, e
 			return nil, err
 		}
 		tags.ForEach(func(t *plumbing.Reference) error {
-			if t.Name().String() == "refs/tags/"+string(version) {
+			if t.Name().String() == path.Join("refs/tags", tagPrefix, string(version)) {
 				hash = t.Hash().String()
 				annotated, err := repo.TagObject(t.Hash())
 				if err == nil {
