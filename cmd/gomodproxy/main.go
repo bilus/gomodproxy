@@ -137,7 +137,7 @@ func main() {
 		if len(kv) != 2 {
 			log.Fatal("bad git path:", path)
 		}
-		options = append(options, api.Git(kv[0], kv[1]))
+		options = append(options, api.GitWithEphemeralTags(kv[0], kv[1]))
 	}
 
 	for _, path := range vcsPaths {

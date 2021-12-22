@@ -1,0 +1,130 @@
+package vcs
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"time"
+)
+
+type ephemeralTag struct {
+	semVer Version
+	short  string
+}
+
+type EphemeralTagStorage struct {
+	tagsByModule map[moduleName][]ephemeralTag
+}
+
+func NewEphemeralTagStorage() *EphemeralTagStorage {
+	return &EphemeralTagStorage{
+		tagsByModule: make(map[moduleName][]ephemeralTag),
+	}
+}
+
+func (s *EphemeralTagStorage) Tag(module string, semVer Version, short string) {
+	tags := s.tagsByModule[module]
+	tmp := tags[:0]
+	for _, t := range tags {
+		if t.semVer != semVer {
+			tmp = append(tmp, t)
+		}
+	}
+	s.tagsByModule[module] = append(tmp, ephemeralTag{semVer, short})
+}
+
+func (s *EphemeralTagStorage) tags(module string) []ephemeralTag {
+	return s.tagsByModule[module]
+}
+
+type moduleName = string
+
+type taggableVCS struct {
+	wrapped *gitVCS
+	module  string
+	storage *EphemeralTagStorage
+}
+
+type Taggable interface {
+	Tag(semVer Version, short string)
+}
+
+// NewGitWithEphemeralTags return a go-git VCS client implementation that
+// provides information about the specific module using the given
+// authentication mechanism while adding support to ephemeral tags.
+func NewGitWithEphemeralTags(l logger, dir string, module string, auth Auth, storage *EphemeralTagStorage) VCS {
+	git := NewGit(l, dir, module, auth).(*gitVCS)
+	return &taggableVCS{
+		wrapped: git,
+		module:  module,
+		storage: storage,
+	}
+}
+
+func (v *taggableVCS) Tag(semVer Version, short string) {
+	v.storage.Tag(v.module, semVer, short)
+}
+
+func (v *taggableVCS) List(ctx context.Context) ([]Version, error) {
+	remoteVersions, err := v.wrapped.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tags := v.storage.tags(v.module)
+	// Remote versions win.
+	return appendEphemeralVersion(remoteVersions, tags...), nil
+}
+
+func appendEphemeralVersion(versions []Version, tags ...ephemeralTag) []Version {
+	ephemeral := make([]Version, 0)
+	for _, tag := range tags {
+		if !versionExists(versions, tag.semVer) {
+			ephemeral = append(ephemeral, tag.semVer)
+		}
+	}
+	return append(versions, ephemeral...)
+}
+
+func versionExists(versions []Version, v Version) bool {
+	for _, v2 := range versions {
+		if v == v2 {
+			return true
+		}
+	}
+	return false
+}
+
+func (v *taggableVCS) Timestamp(ctx context.Context, version Version) (time.Time, error) {
+	version2, err := v.resolveVersion(ctx, version)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return v.wrapped.Timestamp(ctx, version2)
+}
+
+func (v *taggableVCS) Zip(ctx context.Context, version Version) (io.ReadCloser, error) {
+	version2, err := v.resolveVersion(ctx, version)
+	if err != nil {
+		return nil, err
+	}
+	// Zip must contain the ephemeral version.
+	dirName := v.module + "@" + string(version)
+	return v.wrapped.zipUnder(ctx, version2, dirName)
+}
+
+func (v *taggableVCS) resolveVersion(ctx context.Context, version Version) (Version, error) {
+	for _, tag := range v.storage.tags(v.module) {
+		if tag.semVer == version {
+			// TODO(bilus): Duplicated in git.go.
+			t, err := v.wrapped.Timestamp(ctx, Version("v0.0.0-20060102150405-"+tag.short))
+			if err != nil {
+				return Version(""), err
+			}
+			version2 := Version(fmt.Sprintf("v0.0.0-%s-%s", t.Format("20060102150405"), tag.short))
+
+			return version2, nil
+		}
+	}
+	return version, nil
+}

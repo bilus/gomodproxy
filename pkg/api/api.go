@@ -27,6 +27,8 @@ type api struct {
 	vcsPaths []vcsPath
 	stores   []store.Store
 	semc     chan struct{}
+
+	ephemeralTagStorage *vcs.EphemeralTagStorage
 }
 
 type vcsPath struct {
@@ -42,6 +44,7 @@ var (
 	apiInfo = regexp.MustCompile(`^/(?P<module>.*)/@v/(?P<version>.*).info$`)
 	apiMod  = regexp.MustCompile(`^/(?P<module>.*)/@v/(?P<version>.*).mod$`)
 	apiZip  = regexp.MustCompile(`^/(?P<module>.*)/@v/(?P<version>.*).zip$`)
+	apiTag  = regexp.MustCompile(`^/tags/(?P<module>.*)/@v/(?P<version>.*)$`)
 )
 
 var (
@@ -81,6 +84,28 @@ func Git(prefix string, auth string) Option {
 			prefix: prefix,
 			vcs: func(module string) vcs.VCS {
 				return vcs.NewGit(api.log, api.gitdir, module, a)
+			},
+		})
+	}
+}
+
+// GitWithEphemeralTags configures API to use a specific git client when trying
+// to download a repository with the given prefix. Auth string can be a path to
+// the SSK key, or a colon-separated username:password string.
+func GitWithEphemeralTags(prefix string, auth string) Option {
+
+	storage := vcs.NewEphemeralTagStorage()
+
+	a := vcs.Key(auth)
+	if creds := strings.SplitN(auth, ":", 2); len(creds) == 2 {
+		a = vcs.Password(creds[0], creds[1])
+	}
+	return func(api *api) {
+		api.ephemeralTagStorage = storage
+		api.vcsPaths = append(api.vcsPaths, vcsPath{
+			prefix: prefix,
+			vcs: func(module string) vcs.VCS {
+				return vcs.NewGitWithEphemeralTags(api.log, api.gitdir, module, a, storage)
 			},
 		})
 	}
@@ -151,6 +176,7 @@ func (api *api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		{"info", apiInfo, api.info},
 		{"api", apiMod, api.mod},
 		{"zip", apiZip, api.zip},
+		{"tag", apiTag, api.tag},
 	} {
 		if m := route.regexp.FindStringSubmatch(r.URL.Path); m != nil {
 			module, version := m[1], ""
@@ -300,4 +326,33 @@ func (api *api) delete(w http.ResponseWriter, r *http.Request, module, version s
 			return
 		}
 	}
+}
+
+func (api *api) tag(w http.ResponseWriter, r *http.Request, module, version string) {
+	api.log("api.tag", "module", module, "version", version)
+
+	taggable, ok := api.vcs(r.Context(), module).(vcs.Taggable)
+	if !ok {
+		err := fmt.Errorf("repository for module %v is not taggable", module)
+		api.log("api.tag", "module", module, "version", version, "error", err)
+		httpErrors.Add(module, 1)
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	defer r.Body.Close()
+
+	req := struct {
+		Short string `json:"short"`
+	}{}
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		api.log("api.tag", "module", module, "version", version, "error", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	taggable.Tag(vcs.Version(version), req.Short)
+
+	// TODO(bilus): Response
 }

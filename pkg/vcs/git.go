@@ -143,6 +143,11 @@ func isVendoredPackage(name string) bool {
 }
 
 func (g *gitVCS) Zip(ctx context.Context, version Version) (io.ReadCloser, error) {
+	dirName := g.module + "@" + string(version)
+	return g.zipUnder(ctx, version, dirName)
+}
+
+func (g *gitVCS) zipUnder(ctx context.Context, version Version, dirName string) (io.ReadCloser, error) {
 	g.log("gitVCS.Zip", "module", g.module, "version", version)
 	ci, err := g.commit(ctx, version)
 	if err != nil {
@@ -203,7 +208,7 @@ func (g *gitVCS) Zip(ctx context.Context, version Version) (io.ReadCloser, error
 		} else {
 			continue
 		}
-		w, err := zw.Create(filepath.Join(g.module+"@"+string(version), name))
+		w, err := zw.Create(filepath.Join(dirName, name))
 		if err != nil {
 			return nil, err
 		}
