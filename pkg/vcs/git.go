@@ -63,7 +63,7 @@ func (g *gitVCS) List(ctx context.Context) ([]Version, error) {
 	}
 
 	list := []Version{}
-	masterHash := ""
+	var masterHash plumbing.Hash
 	tagPrefix := ""
 	if g.prefix != "" {
 		tagPrefix = g.prefix + "/"
@@ -71,17 +71,33 @@ func (g *gitVCS) List(ctx context.Context) ([]Version, error) {
 	for _, ref := range refs {
 		name := ref.Name()
 		if name == plumbing.Master {
-			masterHash = ref.Hash().String()
+			masterHash = ref.Hash()
 		} else if name.IsTag() && strings.HasPrefix(name.String(), "refs/tags/"+tagPrefix+"v") {
 			list = append(list, Version(strings.TrimPrefix(name.String(), "refs/tags/"+tagPrefix)))
 		}
 	}
 
 	if len(list) == 0 {
-		if masterHash == "" {
+		if masterHash.IsZero() {
 			return nil, errors.New("no tags and no master branch found")
 		}
-		short := masterHash[:12]
+
+		masterCommit, err := repo.CommitObject(masterHash)
+		if err != nil {
+			return nil, err
+		}
+
+		tree, err := masterCommit.Tree()
+		if err != nil {
+			return nil, err
+		}
+
+		if g.isModule(tree) {
+			return nil, errors.New("no matching versions")
+		}
+
+		hashStr := masterHash.String()
+		short := hashStr[:12]
 		t, err := g.Timestamp(ctx, Version("v0.0.0-20060102150405-"+short))
 		if err != nil {
 			return nil, err
@@ -91,6 +107,17 @@ func (g *gitVCS) List(ctx context.Context) ([]Version, error) {
 
 	g.log("gitVCS.List", "module", g.module, "list", list)
 	return list, nil
+}
+
+func (g *gitVCS) isModule(tree *object.Tree) bool {
+	mod := "go.mod"
+	for path := g.prefix; path != "."; path = filepath.Dir(path) {
+		_, err := tree.FindEntry(filepath.Join(path, mod))
+		if err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *gitVCS) Timestamp(ctx context.Context, version Version) (time.Time, error) {
