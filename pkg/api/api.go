@@ -352,7 +352,10 @@ func (api *api) tag(w http.ResponseWriter, r *http.Request, module, version stri
 		return
 	}
 
-	taggable.Tag(vcs.Version(version), req.Short)
-
-	// TODO(bilus): Response
+	err = taggable.Tag(r.Context(), vcs.Version(version), req.Short)
+	if err != nil {
+		api.log("api.tag", "module", module, "version", version, "error", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 }

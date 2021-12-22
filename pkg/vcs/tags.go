@@ -22,7 +22,7 @@ func NewEphemeralTagStorage() *EphemeralTagStorage {
 	}
 }
 
-func (s *EphemeralTagStorage) Tag(module string, semVer Version, short string) {
+func (s *EphemeralTagStorage) Tag(module string, semVer Version, short string) error {
 	tags := s.tagsByModule[module]
 	tmp := tags[:0]
 	for _, t := range tags {
@@ -31,6 +31,7 @@ func (s *EphemeralTagStorage) Tag(module string, semVer Version, short string) {
 		}
 	}
 	s.tagsByModule[module] = append(tmp, ephemeralTag{semVer, short})
+	return nil
 }
 
 func (s *EphemeralTagStorage) tags(module string) []ephemeralTag {
@@ -46,7 +47,7 @@ type taggableVCS struct {
 }
 
 type Taggable interface {
-	Tag(semVer Version, short string)
+	Tag(ctx context.Context, semVer Version, short string) error
 }
 
 // NewGitWithEphemeralTags return a go-git VCS client implementation that
@@ -61,8 +62,15 @@ func NewGitWithEphemeralTags(l logger, dir string, module string, auth Auth, sto
 	}
 }
 
-func (v *taggableVCS) Tag(semVer Version, short string) {
-	v.storage.Tag(v.module, semVer, short)
+func (v *taggableVCS) Tag(ctx context.Context, semVer Version, short string) error {
+	remoteVersions, err := v.wrapped.List(ctx)
+	if err != nil {
+		return err
+	}
+	if versionExists(remoteVersions, semVer) {
+		return fmt.Errorf("remote version %s already exists for module %s", semVer, v.module)
+	}
+	return v.storage.Tag(v.module, semVer, short)
 }
 
 func (v *taggableVCS) List(ctx context.Context) ([]Version, error) {
@@ -110,7 +118,7 @@ func (v *taggableVCS) Zip(ctx context.Context, version Version) (io.ReadCloser, 
 	}
 	// Zip must contain the ephemeral version.
 	dirName := v.module + "@" + string(version)
-	return v.wrapped.zipUnder(ctx, version2, dirName)
+	return v.wrapped.zipAs(ctx, version2, dirName)
 }
 
 func (v *taggableVCS) resolveVersion(ctx context.Context, version Version) (Version, error) {
