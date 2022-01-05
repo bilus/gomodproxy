@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/sixt/gomodproxy/pkg/vcs"
+	"github.com/bilus/gomodproxy/pkg/vcs"
 )
 
 type logger = func(...interface{})

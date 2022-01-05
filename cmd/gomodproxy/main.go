@@ -16,7 +16,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/sixt/gomodproxy/pkg/api"
+	"github.com/bilus/gomodproxy/pkg/api"
 
 	"expvar"
 	_ "net/http/pprof"

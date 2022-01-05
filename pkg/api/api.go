@@ -15,8 +15,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/sixt/gomodproxy/pkg/store"
-	"github.com/sixt/gomodproxy/pkg/vcs"
+	"github.com/bilus/gomodproxy/pkg/store"
+	"github.com/bilus/gomodproxy/pkg/vcs"
 )
 
 type logger = func(v ...interface{})

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/sixt/gomodproxy/pkg/vcs"
+	"github.com/bilus/gomodproxy/pkg/vcs"
 )
 
 type memory struct {
