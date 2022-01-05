@@ -15,3 +15,5 @@
 # Misc
 _gopath
 _gocache
+
+dist/

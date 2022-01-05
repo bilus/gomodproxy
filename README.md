@@ -8,6 +8,10 @@ gomodproxy is a caching proxy for [Go modules].
 
 Go 1.11 has introduced optional proxy support via GOPROXY environment variable.  It is essential for use cases where you want to have better control over your dependencies and handle scenarios when GitHub is down or some open-source dependency has been removed.
 
+## Releasing
+
+See https://goreleaser.com/quick-start/
+
 ## Getting started
 
 gomodproxy requires Go 1.11 or newer. There are no plans to support `vgo` or Go 1.11 beta versions.
