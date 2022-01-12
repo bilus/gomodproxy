@@ -34,6 +34,8 @@ type gitVCS struct {
 	auth   Auth
 }
 
+var ErrNoMatchingVersion = errors.New("no matching versions")
+
 // NewGit return a go-git VCS client implementation that provides information
 // about the specific module using the pgiven authentication mechanism.
 func NewGit(l logger, dir string, module string, auth Auth) VCS {
@@ -61,9 +63,8 @@ func (g *gitVCS) List(ctx context.Context) ([]Version, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	list := []Version{}
-	var masterHash plumbing.Hash
+	masterHash := ""
 	tagPrefix := ""
 	if g.prefix != "" {
 		tagPrefix = g.prefix + "/"
@@ -71,18 +72,24 @@ func (g *gitVCS) List(ctx context.Context) ([]Version, error) {
 	for _, ref := range refs {
 		name := ref.Name()
 		if name == plumbing.Master {
-			masterHash = ref.Hash()
+			masterHash = ref.Hash().String()
 		} else if name.IsTag() && strings.HasPrefix(name.String(), "refs/tags/"+tagPrefix+"v") {
 			list = append(list, Version(strings.TrimPrefix(name.String(), "refs/tags/"+tagPrefix)))
 		}
 	}
 
 	if len(list) == 0 {
-		if masterHash.IsZero() {
+		if masterHash == "" {
 			return nil, errors.New("no tags and no master branch found")
 		}
 
-		masterCommit, err := repo.CommitObject(masterHash)
+		short := masterHash[:12]
+		version, err := g.versionFromHash(ctx, short)
+		if err != nil {
+			return nil, err
+		}
+
+		masterCommit, err := g.commit(ctx, version)
 		if err != nil {
 			return nil, err
 		}
@@ -92,21 +99,25 @@ func (g *gitVCS) List(ctx context.Context) ([]Version, error) {
 			return nil, err
 		}
 
+		// No tags while it's a module.
 		if g.isModule(tree) {
-			return nil, errors.New("no matching versions")
+			return nil, ErrNoMatchingVersion
 		}
 
-		hashStr := masterHash.String()
-		short := hashStr[:12]
-		t, err := g.Timestamp(ctx, Version("v0.0.0-20060102150405-"+short))
-		if err != nil {
-			return nil, err
-		}
-		list = []Version{Version(fmt.Sprintf("v0.0.0-%s-%s", t.Format("20060102150405"), short))}
+		list = []Version{version}
 	}
 
 	g.log("gitVCS.List", "module", g.module, "list", list)
 	return list, nil
+}
+
+func (g *gitVCS) versionFromHash(ctx context.Context, hash string) (Version, error) {
+	t, err := g.Timestamp(ctx, Version("v0.0.0-20060102150405-"+hash))
+	if err != nil {
+		return Version(""), err
+	}
+	v := Version(fmt.Sprintf("v0.0.0-%s-%s", t.Format("20060102150405"), hash))
+	return v, nil
 }
 
 func (g *gitVCS) isModule(tree *object.Tree) bool {

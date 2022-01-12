@@ -62,8 +62,20 @@ func NewGitWithEphemeralTags(l logger, dir string, module string, auth Auth, sto
 	}
 }
 
-func (v *taggableVCS) Tag(ctx context.Context, semVer Version, short string) error {
+func (v *taggableVCS) safeList(ctx context.Context) ([]Version, error) {
 	remoteVersions, err := v.wrapped.List(ctx)
+	if err != nil {
+		// Ignore this error, we can still count on ephemeral tags.
+		if err != ErrNoMatchingVersion {
+			return nil, err
+		}
+		v.wrapped.log("No remote version tags yet:", err)
+	}
+	return remoteVersions, nil
+}
+
+func (v *taggableVCS) Tag(ctx context.Context, semVer Version, short string) error {
+	remoteVersions, err := v.safeList(ctx)
 	if err != nil {
 		return err
 	}
@@ -74,11 +86,10 @@ func (v *taggableVCS) Tag(ctx context.Context, semVer Version, short string) err
 }
 
 func (v *taggableVCS) List(ctx context.Context) ([]Version, error) {
-	remoteVersions, err := v.wrapped.List(ctx)
+	remoteVersions, err := v.safeList(ctx)
 	if err != nil {
 		return nil, err
 	}
-
 	tags := v.storage.tags(v.module)
 	// Remote versions win.
 	return appendEphemeralVersion(remoteVersions, tags...), nil
@@ -124,14 +135,7 @@ func (v *taggableVCS) Zip(ctx context.Context, version Version) (io.ReadCloser, 
 func (v *taggableVCS) resolveVersion(ctx context.Context, version Version) (Version, error) {
 	for _, tag := range v.storage.tags(v.module) {
 		if tag.semVer == version {
-			// TODO(bilus): Duplicated in git.go.
-			t, err := v.wrapped.Timestamp(ctx, Version("v0.0.0-20060102150405-"+tag.short))
-			if err != nil {
-				return Version(""), err
-			}
-			version2 := Version(fmt.Sprintf("v0.0.0-%s-%s", t.Format("20060102150405"), tag.short))
-
-			return version2, nil
+			return v.wrapped.versionFromHash(ctx, tag.short)
 		}
 	}
 	return version, nil
