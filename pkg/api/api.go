@@ -74,9 +74,9 @@ func GitDir(dir string) Option { return func(api *api) { api.gitdir = dir } }
 // Git configures API to use a specific git client when trying to download a
 // repository with the given prefix. Auth string can be a path to the SSK key,
 // or a colon-separated username:password string.
-func Git(prefix string, auth string) Option {
-	a := vcs.Key(auth)
-	if creds := strings.SplitN(auth, ":", 2); len(creds) == 2 {
+func Git(prefix, key, password string) Option {
+	a := vcs.Key(key, password)
+	if creds := strings.SplitN(key, ":", 2); len(creds) == 2 {
 		a = vcs.Password(creds[0], creds[1])
 	}
 	return func(api *api) {
@@ -92,12 +92,13 @@ func Git(prefix string, auth string) Option {
 // GitWithEphemeralTags configures API to use a specific git client when trying
 // to download a repository with the given prefix. Auth string can be a path to
 // the SSK key, or a colon-separated username:password string.
-func GitWithEphemeralTags(prefix string, auth string) Option {
-
+func GitWithEphemeralTags(prefix, key, password string) Option {
+	// TODO(bilus): Ugly but we don't want to mess with the : encoding so
+	// we'll work around the issue of having to pass a passphrase
+	// to decrypt a key.
 	storage := vcs.NewEphemeralTagStorage()
-
-	a := vcs.Key(auth)
-	if creds := strings.SplitN(auth, ":", 2); len(creds) == 2 {
+	a := vcs.Key(key, password)
+	if creds := strings.SplitN(key, ":", 2); len(creds) == 2 {
 		a = vcs.Password(creds[0], creds[1])
 	}
 	return func(api *api) {

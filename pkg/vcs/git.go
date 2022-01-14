@@ -324,7 +324,7 @@ func (g *gitVCS) commit(ctx context.Context, version Version) (*object.Commit, e
 
 func (g *gitVCS) authMethod() (transport.AuthMethod, error) {
 	if g.auth.Key != "" {
-		return ssh.NewPublicKeysFromFile("git", g.auth.Key, "")
+		return ssh.NewPublicKeysFromFile("git", g.auth.Key, g.auth.Password)
 	} else if g.auth.Username != "" {
 		return &http.BasicAuth{Username: g.auth.Username, Password: g.auth.Password}, nil
 	}

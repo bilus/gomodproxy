@@ -61,4 +61,4 @@ func NoAuth() Auth { return Auth{} }
 func Password(username, password string) Auth { return Auth{Username: username, Password: password} }
 
 // Key returns an Auth implementation that uses key file authentication mechanism.
-func Key(key string) Auth { return Auth{Key: key} }
+func Key(key, password string) Auth { return Auth{Key: key, Password: password} }

@@ -137,7 +137,8 @@ func main() {
 		if len(kv) != 2 {
 			log.Fatal("bad git path:", path)
 		}
-		options = append(options, api.GitWithEphemeralTags(kv[0], kv[1]))
+		password := os.Getenv("SSH_PASSPHRASE")
+		options = append(options, api.GitWithEphemeralTags(kv[0], kv[1], password))
 	}
 
 	for _, path := range vcsPaths {
