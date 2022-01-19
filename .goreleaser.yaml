@@ -29,6 +29,8 @@ checksum:
   name_template: 'checksums.txt'
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
+universal_binaries:
+  - name_template: "{{.ProjectName}}_MacOS_{{.Version}}"
 changelog:
   sort: asc
   filters:
