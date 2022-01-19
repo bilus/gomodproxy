@@ -226,6 +226,12 @@ func (api *api) module(ctx context.Context, module string, version vcs.Version) 
 	api.semc <- struct{}{}
 	defer func() { <-api.semc }()
 
+	return api.store(ctx, module, version)
+}
+
+func (api *api) store(ctx context.Context, module string, version vcs.Version) ([]byte, time.Time, error) {
+	api.log("api.store", "module", module, "version", version.String())
+
 	timestamp, err := api.vcs(ctx, module).Timestamp(ctx, version)
 	if err != nil {
 		return nil, time.Time{}, err
@@ -355,7 +361,18 @@ func (api *api) tag(w http.ResponseWriter, r *http.Request, module, version stri
 		return
 	}
 
+	// wait for semaphore
+	api.semc <- struct{}{}
+	defer func() { <-api.semc }()
+
 	err = taggable.Tag(r.Context(), vcs.Version(version), req.Short)
+	if err != nil {
+		api.log("api.tag", "module", module, "version", version, "error", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	_, _, err = api.store(r.Context(), module, vcs.Version(version))
 	if err != nil {
 		api.log("api.tag", "module", module, "version", version, "error", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)

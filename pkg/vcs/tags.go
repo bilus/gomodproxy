@@ -82,6 +82,7 @@ func (v *taggableVCS) Tag(ctx context.Context, semVer Version, short string) err
 	if versionExists(remoteVersions, semVer) {
 		return fmt.Errorf("remote version %s already exists for module %s", semVer, v.module)
 	}
+	v.wrapped.log("taggableVCS.Tag", "version", semVer, "short", short)
 	return v.storage.Tag(v.module, semVer, short)
 }
 
@@ -92,7 +93,10 @@ func (v *taggableVCS) List(ctx context.Context) ([]Version, error) {
 	}
 	tags := v.storage.tags(v.module)
 	// Remote versions win.
-	return appendEphemeralVersion(remoteVersions, tags...), nil
+	allVersions := appendEphemeralVersion(remoteVersions, tags...)
+	// TODO(bilus): BUG - tag version 1.0.0 and then 0.1.0 - 0.1.0 is the "latest".
+	// sort.Slice(allVersions, func(i, j) bool { return allVersions[i].Before(allVersions[j]) })
+	return allVersions, nil
 }
 
 func appendEphemeralVersion(versions []Version, tags ...ephemeralTag) []Version {
