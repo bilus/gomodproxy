@@ -303,9 +303,11 @@ func (api *api) mod(w http.ResponseWriter, r *http.Request, module, version stri
 					}
 				}
 			}
+			w.Write([]byte(fmt.Sprintf("module %s\n", module)))
+			return
 		}
 	}
-	w.Write([]byte(fmt.Sprintf("module %s\n", module)))
+	http.Error(w, err.Error(), http.StatusBadRequest)
 }
 
 func (api *api) zip(w http.ResponseWriter, r *http.Request, module, version string) {
